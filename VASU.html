@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShipTrack - Delivery & Shipment Management</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Leaflet CSS & JS for GPS Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    #map { height: 260px; width: 100%; border-radius: 0.75rem; z-index: 10; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- TOP HEADER / NAVBAR -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <div class="bg-blue-600 text-white p-2 rounded-xl flex items-center justify-center shadow-md shadow-blue-500/20">
+          <i class="fa-solid fa-truck-fast text-lg"></i>
+        </div>
+        <span class="font-bold text-xl text-slate-900 tracking-tight">ShipTrack</span>
+      </div>
+      
+      <div class="flex items-center space-x-3">
+        <button id="themeToggle" class="text-slate-500 hover:text-slate-700 p-2 text-sm rounded-lg hover:bg-slate-100">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+        <button id="menuBtn" class="text-slate-700 p-2 text-lg hover:bg-slate-100 rounded-lg">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- MOBILE NAVIGATION DROPDOWN -->
+    <div id="navMenu" class="hidden bg-white border-b border-slate-200 px-4 py-3 space-y-2 max-w-md mx-auto">
+      <button onclick="switchTab('track')" class="w-full text-left font-semibold text-slate-700 hover:text-blue-600 py-2 flex items-center space-x-2">
+        <i class="fa-solid fa-magnifying-glass text-blue-600 w-5"></i>
+        <span>Track Package</span>
+      </button>
+      <button onclick="switchTab('deliveries')" class="w-full text-left font-semibold text-slate-700 hover:text-blue-600 py-2 flex items-center space-x-2">
+        <i class="fa-solid fa-box text-blue-600 w-5"></i>
+        <span>My Deliveries</span>
+      </button>
+      <button onclick="switchTab('admin')" class="w-full text-left font-semibold text-slate-700 hover:text-blue-600 py-2 flex items-center space-x-2">
+        <i class="fa-solid fa-user-gear text-blue-600 w-5"></i>
+        <span>Admin Dashboard</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-grow max-w-md mx-auto w-full p-4 space-y-5">
+
+    <!-- SEARCH TRACKING SECTION -->
+    <section class="bg-gradient-to-br from-blue-900 to-indigo-900 text-white p-5 rounded-2xl shadow-xl space-y-4">
+      <h1 class="text-2xl font-bold tracking-tight leading-snug">Real-Time Package Tracking</h1>
+      <p class="text-blue-200 text-xs">Enter your tracking number to get instant GPS updates, estimated delivery dates, and shipping history.</p>
+      
+      <div class="space-y-2">
+        <div class="relative">
+          <i class="fa-solid fa-barcode absolute left-3 top-3.5 text-slate-400"></i>
+          <input id="trackingInput" type="text" placeholder="Enter Tracking ID (e.g. ST-332211)" 
+            class="w-full pl-10 pr-4 py-3 rounded-xl text-slate-900 font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-sm shadow-inner">
+        </div>
+        <button onclick="handleTrack()" class="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 font-bold py-3 rounded-xl transition-all flex items-center justify-center space-x-2 shadow-lg shadow-blue-600/30 text-sm">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <span>Track Package</span>
+        </button>
+      </div>
+
+      <!-- QUICK DEMO IDS -->
+      <div class="pt-2 border-t border-blue-800/80">
+        <p class="text-[11px] font-medium text-blue-300 mb-2">💡 Demo IDs:</p>
+        <div class="flex flex-wrap gap-1.5 text-[11px]">
+          <button onclick="quickTrack('ST-987654')" class="bg-blue-800/60 hover:bg-blue-700 px-2.5 py-1 rounded-md text-blue-100 transition">ST-987654 (Transit)</button>
+          <button onclick="quickTrack('ST-456789')" class="bg-blue-800/60 hover:bg-blue-700 px-2.5 py-1 rounded-md text-blue-100 transition">ST-456789 (Delivered)</button>
+          <button onclick="quickTrack('ST-123456')" class="bg-blue-800/60 hover:bg-blue-700 px-2.5 py-1 rounded-md text-blue-100 transition">ST-123456 (Out for Del)</button>
+          <button onclick="quickTrack('ST-332211')" class="bg-blue-800/60 hover:bg-blue-700 px-2.5 py-1 rounded-md text-blue-100 transition">ST-332211 (Processing)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRACKING RESULT DISPLAY -->
+    <div id="trackingDetails" class="space-y-4">
+      
+      <!-- STATUS CARDS -->
+      <div class="grid grid-cols-1 gap-3">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Status</span>
+          <div id="statusBadge" class="mt-1 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+            Order Placed
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Est. Delivery</span>
+          <p id="estDelivery" class="text-lg font-bold text-slate-900 mt-0.5">Oct 09, 2026</p>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Carrier / Service</span>
+          <p id="carrierName" class="text-sm font-semibold text-slate-800 mt-0.5">Japan Post Alliance (Standard)</p>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Tracking Number</span>
+            <p id="displayTrackingId" class="text-base font-bold text-slate-900 mt-0.5">ST-332211</p>
+          </div>
+          <button onclick="copyTrackingId()" class="text-slate-400 hover:text-blue-600 p-2">
+            <i class="fa-regular fa-copy text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- PROGRESS TIMELINE -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">Shipment Progress</h3>
+        
+        <div id="timelineContainer" class="relative pl-6 border-l-2 border-slate-200 space-y-6">
+          <!-- Dynamically populated timeline steps -->
+        </div>
+      </section>
+
+      <!-- GPS ROUTE MAP -->
+      <section class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-map-location-dot text-blue-600"></i>
+            <h3 class="text-sm font-bold text-slate-800">GPS Route Tracking</h3>
+          </div>
+          <span class="inline-flex items-center text-[11px] font-semibold text-emerald-600">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping mr-1.5"></span> Live Location
+          </span>
+        </div>
+        
+        <div id="map"></div>
+        
+        <div class="flex justify-between text-xs text-slate-500 font-medium pt-1">
+          <span><strong>Origin:</strong> <span id="mapOrigin">Tokyo, Japan</span></span>
+          <span><strong>Destination:</strong> <span id="mapDest">Osaka, Japan</span></span>
+        </div>
+      </section>
+
+      <!-- CHECKPOINT AUDIT HISTORY -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-list-check text-blue-600"></i>
+            <h3 class="text-sm font-bold text-slate-800">Checkpoint Audit History</h3>
+          </div>
+          <span id="eventCount" class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">1 event</span>
+        </div>
+
+        <div id="auditHistory" class="space-y-3 text-xs divide-y divide-slate-100">
+          <!-- Dynamically populated checkpoint logs -->
+        </div>
+
+        <div class="pt-2 grid grid-cols-2 gap-2">
+          <button onclick="alert('Shipping Label PDF preview downloaded.')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 rounded-xl text-xs flex items-center justify-center space-x-1">
+            <i class="fa-solid fa-print"></i>
+            <span>Shipping Label</span>
+          </button>
+          <button onclick="alert('SMS Alerts registered for this tracking ID!')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 rounded-xl text-xs flex items-center justify-center space-x-1">
+            <i class="fa-solid fa-bell"></i>
+            <span>Alert Me</span>
+          </button>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="mt-auto bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-slate-400">
+    <div class="flex items-center justify-center space-x-2 mb-1">
+      <i class="fa-solid fa-shield-halved text-blue-600"></i>
+      <span class="font-medium text-slate-600">ShipTrack Logistics Cloud Engine &copy; 2026</span>
+    </div>
+    <div class="flex justify-center space-x-4 text-[11px] text-slate-500 pt-1">
+      <a href="#" class="hover:underline">System Status</a>
+      <span>&bull;</span>
+      <a href="#" class="hover:underline">API Documentation</a>
+      <span>&bull;</span>
+      <a href="#" class="hover:underline">Contact Support</a>
+    </div>
+  </footer>
+
+  <script>
+    // DATA STORE
+    const shipments = {
+      "ST-332211": {
+        status: "Order Placed",
+        step: 1,
+        estDelivery: "Oct 09, 2026",
+        carrier: "Japan Post Alliance (Standard)",
+        origin: "Tokyo, Japan",
+        destination: "Osaka, Japan",
+        coords: { origin: [35.6762, 139.6503], current: [35.6762, 139.6503], dest: [34.6937, 135.5023] },
+        history: [
+          { status: "Order Placed", location: "Tokyo, Japan", time: "2026-10-05 02:00 PM", note: "Awaiting pickup from merchant." }
+        ]
+      },
+      "ST-987654": {
+        status: "In Transit",
+        step: 3,
+        estDelivery: "Oct 07, 2026",
+        carrier: "EuroExpress Cargo (Overnight)",
+        origin: "London, UK",
+        destination: "Berlin, Germany",
+        coords: { origin: [51.5074, -0.1278], current: [50.8503, 4.3517], dest: [52.5200, 13.4050] },
+        history: [
+          { status: "In Transit", location: "Brussels Hub, Belgium", time: "2026-10-05 08:30 AM", note: "Departed sorting facility." },
+          { status: "Picked Up", location: "London Air Cargo", time: "2026-10-04 04:15 PM", note: "Package processed." },
+          { status: "Order Placed", location: "London, UK", time: "2026-10-03 10:00 AM", note: "Shipment registered." }
+        ]
+      },
+      "ST-456789": {
+        status: "Delivered",
+        step: 5,
+        estDelivery: "Oct 04, 2026",
+        carrier: "Global Logistics Direct",
+        origin: "San Francisco, USA",
+        destination: "New York, USA",
+        coords: { origin: [37.7749, -122.4194], current: [40.7128, -74.0060], dest: [40.7128, -74.0060] },
+        history: [
+          { status: "Delivered", location: "New York, USA", time: "2026-10-04 02:45 PM", note: "Signed by recipient." },
+          { status: "Out for Delivery", location: "Manhattan Depot", time: "2026-10-04 08:00 AM", note: "Loaded on courier vehicle." },
+          { status: "In Transit", location: "Chicago Sorting Hub", time: "2026-10-02 11:20 PM", note: "In transit." },
+          { status: "Order Placed", location: "San Francisco, USA", time: "2026-10-01 09:00 AM", note: "Order created." }
+        ]
+      },
+      "ST-123456": {
+        status: "Out for Delivery",
+        step: 4,
+        estDelivery: "Oct 05, 2026",
+        carrier: "Express Courier Fleet",
+        origin: "Paris, France",
+        destination: "Lyon, France",
+        coords: { origin: [48.8566, 2.3522], current: [45.7640, 4.8357], dest: [45.7640, 4.8357] },
+        history: [
+          { status: "Out for Delivery", location: "Lyon Central Hub", time: "2026-10-05 07:15 AM", note: "Out with driver for final delivery." },
+          { status: "In Transit", location: "Dijon Facility", time: "2026-10-04 06:00 PM", note: "En route." },
+          { status: "Order Placed", location: "Paris, France", time: "2026-10-03 11:30 AM", note: "Label printed." }
+        ]
+      }
+    };
+
+    let leafletMap = null;
+    let mapMarker = null;
+    let mapPolyline = null;
+
+    const stepsList = [
+      { num: 1, title: "Order Placed" },
+      { num: 2, title: "Picked Up" },
+      { num: 3, title: "In Transit" },
+      { num: 4, title: "Out for Delivery" },
+      { num: 5, title: "Delivered" }
+    ];
+
+    // INITIALIZE PAGE
+    window.onload = function() {
+      initMap();
+      renderTracking("ST-332211");
+
+      // Mobile Menu Toggle
+      document.getElementById('menuBtn').addEventListener('click', () => {
+        document.getElementById('navMenu').classList.toggle('hidden');
+      });
+    };
+
+    function initMap() {
+      leafletMap = L.map('map', { zoomControl: true }).setView([35.6762, 139.6503], 5);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(leafletMap);
+    }
+
+    function renderTracking(id) {
+      const data = shipments[id];
+      if (!data) {
+        alert("Tracking ID not found!");
+        return;
+      }
+
+      document.getElementById('displayTrackingId').innerText = id;
+      document.getElementById('estDelivery').innerText = data.estDelivery;
+      document.getElementById('carrierName').innerText = data.carrier;
+      document.getElementById('statusBadge').innerText = data.status;
+
+      // Update Timeline
+      const timelineEl = document.getElementById('timelineContainer');
+      timelineEl.innerHTML = '';
+
+      stepsList.forEach((st) => {
+        const isCompleted = st.num <= data.step;
+        const isCurrent = st.num === data.step;
+
+        const stepDiv = document.createElement('div');
+        stepDiv.className = "relative flex items-start space-x-3";
+
+        const iconClass = isCompleted 
+          ? "bg-blue-600 text-white font-bold" 
+          : "bg-slate-100 border border-slate-300 text-slate-400 font-medium";
+
+        stepDiv.innerHTML = `
+          <div class="absolute -left-[31px] top-0 w-6 h-6 rounded-full ${iconClass} flex items-center justify-center text-xs shadow-sm">
+            ${isCompleted ? '<i class="fa-solid fa-check text-[10px]"></i>' : st.num}
+          </div>
+          <div>
+            <p class="text-xs font-bold ${isCompleted ? 'text-slate-900' : 'text-slate-400'}">${st.title}</p>
+            ${isCurrent ? '<span class="text-[10px] text-blue-600 font-semibold">Current Location</span>' : ''}
+          </div>
+        `;
+        timelineEl.appendChild(stepDiv);
+      });
+
+      // Update Audit Logs
+      const auditEl = document.getElementById('auditHistory');
+      document.getElementById('eventCount').innerText = `${data.history.length} events logged`;
+      auditEl.innerHTML = '';
+
+      data.history.forEach((ev) => {
+        const logItem = document.createElement('div');
+        logItem.className = "pt-2 space-y-0.5";
+        logItem.innerHTML = `
+          <div class="flex justify-between font-bold text-slate-800">
+            <span>${ev.status}</span>
+            <span class="text-slate-400 font-normal text-[11px]">${ev.time}</span>
+          </div>
+          <p class="text-slate-600 font-medium">${ev.location}</p>
+          <p class="text-slate-400 text-[11px]">${ev.note}</p>
+        `;
+        auditEl.appendChild(logItem);
+      });
+
+      // Update Map
+      document.getElementById('mapOrigin').innerText = data.origin;
+      document.getElementById('mapDest').innerText = data.destination;
+
+      if (leafletMap) {
+        if (mapMarker) leafletMap.removeLayer(mapMarker);
+        if (mapPolyline) leafletMap.removeLayer(mapPolyline);
+
+        const currentPos = data.coords.current;
+        const originPos = data.coords.origin;
+        const destPos = data.coords.dest;
+
+        leafletMap.setView(currentPos, 6);
+
+        mapMarker = L.marker(currentPos).addTo(leafletMap)
+          .bindPopup(`<b>Current Location:</b> ${data.history[0].location}<br><b>Status:</b> ${data.status}`)
+          .openPopup();
+
+        mapPolyline = L.polyline([originPos, currentPos, destPos], {
+          color: '#2563eb',
+          weight: 4,
+          dashArray: '6, 8',
+          opacity: 0.7
+        }).addTo(leafletMap);
+      }
+    }
+
+    function handleTrack() {
+      const inputVal = document.getElementById('trackingInput').value.trim().toUpperCase();
+      if (!inputVal) {
+        alert("Please enter a tracking ID.");
+        return;
+      }
+      renderTracking(inputVal);
+    }
+
+    function quickTrack(id) {
+      document.getElementById('trackingInput').value = id;
+      renderTracking(id);
+    }
+
+    function copyTrackingId() {
+      const idText = document.getElementById('displayTrackingId').innerText;
+      navigator.clipboard.writeText(idText);
+      alert("Tracking ID " + idText + " copied to clipboard!");
+    }
+
+    function switchTab(tabName) {
+      document.getElementById('navMenu').classList.add('hidden');
+      if (tabName === 'admin') {
+        alert("Admin Dashboard View: Here logistics operators can create packages, change checkpoint statuses, and issue shipping labels.");
+      } else if (tabName === 'deliveries') {
+        alert("My Deliveries View: Filter and monitor your recent orders.");
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  </script>
+
+</body>
+</html><!-- Exit / Logout Button -->
+<button 
+  id="exitBtn" 
+  onclick="handleExit()" 
+  class="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg shadow-md transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-400">
+  <i class="fas fa-sign-out-alt"></i>
+  <span>Exit Application</span>
+</button>
